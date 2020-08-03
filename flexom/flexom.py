@@ -30,6 +30,9 @@ class Flexom:
             "password":self._password
         }
         r = requests.post(url, json=data).json()
+        if 'message' in r:
+            raise NameError(r['message'])
+
         master_token = r['token']
     
         url = 'https://hemisphere.ubiant.com/buildings/mine/infos'
