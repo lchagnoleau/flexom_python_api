@@ -1,12 +1,54 @@
 import requests
-from time import time
+from time import time, sleep
+from threading import Thread
 
 
 class Flexom:
-    def __init__(self, token):
-        self._token = token
+    def __init__(self, login, password):
+        self._login = login
+        self._password = password
+        self._token = ''
         self._url = 'https://serene-turing-4cigeu08.eu-west.hemis.io/hemis/rest/'
         self._headers = {'Authorization': f'Bearer {self._token}'}
+        self._master_password = self._signin()
+
+        self._renew_token()
+        Thread(target=self._renew_token_tread).start()
+
+    def _signin(self):
+        url = 'https://hemisphere.ubiant.com/users/signin'
+        data = {
+            "device":{
+                "uid":"0",
+                "name":"0",
+                "model":"0",
+                "operating_system":"0",
+                "first_connection":0,
+                "last_connection":0
+                },
+            "email":self._login,
+            "password":self._password
+        }
+        r = requests.post(url, json=data).json()
+        master_token = r['token']
+    
+        url = 'https://hemisphere.ubiant.com/buildings/mine/infos'
+        headers = {'Authorization': f'Bearer {master_token}'}
+        r = requests.get(url, headers=headers).json()
+
+        return r[0]['authorizationToken']
+
+    def _renew_token(self):
+        endpoint = 'WS_UserManagement/login'
+        data = {'email':self._login, 'password':self._master_password, 'kernelId':'hemis4'}
+        r = self._post(endpoint=endpoint, data=data, form_type='data')
+        self._token = r['token']
+        self._headers = {'Authorization': f'Bearer {self._token}'}
+
+    def _renew_token_tread(self):
+        while True:
+            sleep(1800) # 30 minutes
+            self._renew_token()
 
     def _get(self, endpoint):
         return requests.get(self._url+endpoint, headers=self._headers).json()
@@ -16,6 +58,12 @@ class Flexom:
             return requests.put(self._url+endpoint, json=data, headers=self._headers)
         elif form_type == 'data':
             return requests.put(self._url+endpoint, data=data, headers=self._headers)
+
+    def _post(self, endpoint, data, form_type='json'):
+        if form_type == 'json':
+            return requests.post(self._url+endpoint, json=data, headers=self._headers)
+        elif form_type == 'data':
+            return requests.post(self._url+endpoint, data=data, headers=self._headers).json()
 
     def _get_actuators(self, room_id):
         endpoint = f'WS_ReactiveEnvironmentDataManagement/{room_id}/BRI/actuators'
